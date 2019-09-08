@@ -1,0 +1,10 @@
+Version 0.4 (beta), released 2019-01-22
+
+  - Almost complete rewrite of the extension
+  - Improve documentation
+  - Add simple regression test
+
+Version 0.3 (beta), released 2015-01-22
+
+  - initial release
+

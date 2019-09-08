@@ -1,0 +1,496 @@
+Pager usage is off.
+psql:sql/dl_advanced.sql:7: NOTICE:  database "test_datalink" does not exist, skipping
+DROP DATABASE
+CREATE DATABASE
+You are now connected to database "test_datalink" as user "gilles".
+CREATE EXTENSION
+CREATE EXTENSION
+CREATE EXTENSION
+CREATE TABLE
+--------------------------------------------------------------------------------
+Create a directory/prefix as URL base with no link control, this is the default
+--------------------------------------------------------------------------------
+INSERT 0 1
+Expanded display is on.
+-[ RECORD 1 ]+---------------------------
+dirid        | 1
+dirname      | public.dl_example.efile
+base         | file:///tmp/test_datalink/
+linkcontrol  | f
+integrity    | f
+readperm     | f
+writeperm    | f
+writeblocked | f
+writetoken   | t
+recovery     | f
+onunlink     | NONE
+
+Expanded display is off.
+--------------------------------------------------------------------------------
+Register file /tmp/test_datalink/img1.png
+--------------------------------------------------------------------------------
+INSERT 0 1
+ ex_id |                           efile                            
+-------+------------------------------------------------------------
+     1 | (1,img1.png,"Url must be rebased on test_dir directory",,)
+(1 row)
+
+--------------------------------------------------------------------------------
+Nothing must change on file system
+--------------------------------------------------------------------------------
+ file2.txt
+ file3.txt
+ file4.txt
+ file5.txt
+ img1.png
+ pg_dltoken
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Try to read the content of file /etc/passwd with dlreadfile()
+Must raise an error reading URL is not authorized.
+--------------------------------------------------------------------------------
+psql:sql/dl_advanced.sql:50: ERROR:  reading URL "img1.png" is not authorized.
+CONTEXT:  PL/pgSQL function dlreadfile(datalink,uri) line 20 at RAISE
+--------------------------------------------------------------------------------
+Obtain a url without token (no link control) to read a file
+--------------------------------------------------------------------------------
+           dlurlcomplete            
+------------------------------------
+ file:///tmp/test_datalink/img1.png
+(1 row)
+
+--------------------------------------------------------------------------------
+Obtain a token to write to the file: ERROR: Can not write with NO LINK CONTROL.
+--------------------------------------------------------------------------------
+psql:sql/dl_advanced.sql:60: ERROR:  Can not write with NO LINK CONTROL.
+CONTEXT:  PL/pgSQL function dlurlcompletewrite(datalink) line 20 at RAISE
+--------------------------------------------------------------------------------
+Try to register a file that is not on base directory public.dl_example.efile
+Must raise an error: DataLink URL does not match directory base
+--------------------------------------------------------------------------------
+psql:sql/dl_advanced.sql:66: ERROR:  DataLink URL "file:///tmp/img2.png" does not match directory base "file:///tmp/test_datalink/"
+CONTEXT:  PL/pgSQL function dlvalue(uri,text,text) line 98 at RAISE
+--------------------------------------------------------------------------------
+Replace img1.png file with an other using dlvalue() in an update.
+This only affect the SQL part, not link control is set
+--------------------------------------------------------------------------------
+UPDATE 1
+ ex_id |                                        efile                                         
+-------+--------------------------------------------------------------------------------------
+     1 | (1,file5.txt,"Replace with dlvalue() the datalink but do not touch file on disk.",,)
+(1 row)
+
+--------------------------------------------------------------------------------
+Nothing mightange in the directory and no token must have been generated
+Content of /tmp/test_datalink/ directory:
+-----------------------------------------
+ file2.txt
+ file3.txt
+ file4.txt
+ file5.txt
+ img1.png
+ pg_dltoken
+Content of /tmp/test_datalink/pg_dltoken/ directory:
+----------------------------------------------------
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Try to use dlnewcopy() which must result in error "writing is not authorized"
+--------------------------------------------------------------------------------
+psql:sql/dl_advanced.sql:87: ERROR:  The Datalink has the NO LINK CONTROL, writing is not authorized.
+CONTEXT:  PL/pgSQL function dlnewcopy(datalink,uri,boolean) line 33 at RAISE
+--------------------------------------------------------------------------------
+Test the Datalink attributs chain
+--------------------------------------------------------------------------------
+Enable FILE LINK CONTROL, must complain that ON UNLINK shall be specified.
+--------------------------------------------------------------------------------
+psql:sql/dl_advanced.sql:94: ERROR:  With FILE LINK CONTROL either ON UNLINK RESTORE or ON UNLINK DELETE shall be specified.
+CONTEXT:  PL/pgSQL function verify_datalink_options() line 20 at RAISE
+--------------------------------------------------------------------------------
+Set ON UNLINK to RESTORE, must complain that INTEGRITY ALL must be used
+if WRITE PERMISSION BLOCKED is specified
+--------------------------------------------------------------------------------
+psql:sql/dl_advanced.sql:99: ERROR:  If either WRITE PERMISSION BLOCKED or WRITE PERMISSION ADMIN is specified, then INTEGRITY ALL shall be specified and <unlink option> shall be specified.
+CONTEXT:  PL/pgSQL function verify_datalink_options() line 48 at RAISE
+--------------------------------------------------------------------------------
+Enable read / write perm at DB side: must complain that INTEGRITY SELECTIVE
+is not compatible with our config
+--------------------------------------------------------------------------------
+psql:sql/dl_advanced.sql:104: ERROR:  If INTEGRITY SELECTIVE is specified, then READ PERMISSION FS, WRITE PERMISSION FS and RECOVERY NO shall be specified.
+CONTEXT:  PL/pgSQL function verify_datalink_options() line 29 at RAISE
+--------------------------------------------------------------------------------
+Then set INTEGRITY ALL and update will be successful
+--------------------------------------------------------------------------------
+UPDATE 1
+--------------------------------------------------------------------------------
+Set writetoken to false to use basic .new and .old suffix to manipulate files.
+--------------------------------------------------------------------------------
+UPDATE 1
+--------------------------------------------------------------------------------
+Register a text file in public.dl_example.efile base directory
+--------------------------------------------------------------------------------
+INSERT 0 1
+--------------------------------------------------------------------------------
+Obtain the url of the file with no token part and
+verify that no token is generated in pg_dltoken
+--------------------------------------------------------------------------------
+          dlurlcompleteonly          
+-------------------------------------
+ file:///tmp/test_datalink/file3.txt
+(1 row)
+
+--------------------------------------------------------------------------------
+Nothing might change in the directory and no token must have been generated
+-----------------------------------------
+ file2.txt
+ file3.txt
+ file4.txt
+ file5.txt
+ img1.png
+ pg_dltoken
+Content of /tmp/test_datalink/pg_dltoken/ directory:
+----------------------------------------------------
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Try to read the content of the file with a fake token,
+must raise an error can not stat file ... No such file or directory
+--------------------------------------------------------------------------------
+psql:sql/dl_advanced.sql:136: ERROR:  can not stat file "/tmp/test_datalink/pg_dltoken/9331cdc3-b33e-48d9-aaf0-6994532d6647": No such file or directory
+CONTEXT:  SQL statement "SELECT datalink_verify_token($1::text, $2, $3)"
+PL/pgSQL function is_valid_token(uuid,boolean,text) line 8 at SQL statement
+SQL statement "SELECT is_valid_token(v_token::uuid, $2, v_path)"
+PL/pgSQL function verify_token_from_uri(uri,boolean) line 23 at SQL statement
+SQL statement "SELECT verify_token_from_uri(v_uri, false)"
+PL/pgSQL function dlreadfile(datalink,uri) line 27 at SQL statement
+--------------------------------------------------------------------------------
+Obtain a token to write the file. As writetoken is false this is the url only
+with .new suffix, then use dlnewcopy() to relink to new file and then call
+dlpreviouscopy() to restore the .old file. We show the content of the directory
+between each step.
+--------------------------------------------------------------------------------
+psql:sql/dl_advanced.sql:168: NOTICE:  Uri must have the .new prefix: file:///tmp/test_datalink/file3.txt.new
+psql:sql/dl_advanced.sql:168: NOTICE:  Directory content after dlurlcompletewrite() of /tmp/test_datalink/ (must show file3.txt.new + file3.txt):
+psql:sql/dl_advanced.sql:168: NOTICE:  file5.txt
+psql:sql/dl_advanced.sql:168: NOTICE:  file4.txt
+psql:sql/dl_advanced.sql:168: NOTICE:  pg_dltoken
+psql:sql/dl_advanced.sql:168: NOTICE:  img1.png
+psql:sql/dl_advanced.sql:168: NOTICE:  file3.txt.new
+psql:sql/dl_advanced.sql:168: NOTICE:  file2.txt
+psql:sql/dl_advanced.sql:168: NOTICE:  file3.txt
+psql:sql/dl_advanced.sql:168: NOTICE:  Directory content after dlnewcopy() of /tmp/test_datalink/ (must show file3.txt.old + file3.txt):
+psql:sql/dl_advanced.sql:168: NOTICE:  file5.txt
+psql:sql/dl_advanced.sql:168: NOTICE:  file3.txt.old
+psql:sql/dl_advanced.sql:168: NOTICE:  file4.txt
+psql:sql/dl_advanced.sql:168: NOTICE:  pg_dltoken
+psql:sql/dl_advanced.sql:168: NOTICE:  img1.png
+psql:sql/dl_advanced.sql:168: NOTICE:  file2.txt
+psql:sql/dl_advanced.sql:168: NOTICE:  file3.txt
+psql:sql/dl_advanced.sql:168: NOTICE:  Restore previous version of the file, rename .old file into file3.txt. The new copy is overridden.
+DO
+--------------------------------------------------------------------------------
+Initial state might be restored in the directory and no token generated
+-----------------------------------------
+ file2.txt
+ file3.txt
+ file4.txt
+ file5.txt
+ img1.png
+ pg_dltoken
+Content of /tmp/test_datalink/pg_dltoken/ directory:
+----------------------------------------------------
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Use replacecontent() with NO LINK CONTROL, must raise an error source file must
+exists on filesystem
+--------------------------------------------------------------------------------
+psql:sql/dl_advanced.sql:183: ERROR:  Data location source file "file:///tmp/test_datalink/file3.txt.new" must exists on filesystem.
+CONTEXT:  PL/pgSQL function dlreplacecontent(datalink,uri,uri,text) line 57 at RAISE
+--------------------------------------------------------------------------------
+Create the new file file3.txt.new as a copy of file5.txt
+(cp /tmp/test_datalink/file5.txt /tmp/test_datalink/file3.txt.new)
+Call dlreplacecontent() again, no error must be raised and file content changed
+--------------------------------------------------------------------------------
+UPDATE 1
+--------------------------------------------------------------------------------
+There must be a file3.txt.old file and content of file must be from file5.txt
+-----------------------------------------
+ file2.txt
+ file3.txt
+ file3.txt.old
+ file4.txt
+ file5.txt
+ img1.png
+ pg_dltoken
+Content of /tmp/test_datalink/pg_dltoken/ directory:
+----------------------------------------------------
+--------------------------------------------------------------------------------
+cat /tmp/test_datalink/file3.txt
+--------------------------------------------------------------------------------
+Fifth test file originaly named file5.txt
+--------------------------------------------------------------------------------
+Only the content have been replaced, the Datalink URI must stay the same
+--------------------------------------------------------------------------------
+ ex_id |               efile               
+-------+-----------------------------------
+     3 | (1,file3.txt,"Replace content",,)
+(1 row)
+
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Do the same test but with writetoken = true. Enable REQUIRE TOKEN FOR UPDATE
+--------------------------------------------------------------------------------
+UPDATE 1
+--------------------------------------------------------------------------------
+Obtain the url without token of the file and verify that no token is generated
+--------------------------------------------------------------------------------
+          dlurlcompleteonly          
+-------------------------------------
+ file:///tmp/test_datalink/file3.txt
+(1 row)
+
+--------------------------------------------------------------------------------
+Initial state might be restored in the directory and no token generated
+-----------------------------------------
+ file2.txt
+ file3.txt
+ file3.txt.old
+ file4.txt
+ file5.txt
+ img1.png
+ pg_dltoken
+Content of /tmp/test_datalink/pg_dltoken/ directory:
+----------------------------------------------------
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Obtain a token to write the file. As writetoken is true the file is copied with
+the token in his name. Then use dlnewcopy() to relink to new file and then call
+dlpreviouscopy() to restore the .old file. We show the content of the directory
+between each step.
+--------------------------------------------------------------------------------
+psql:sql/dl_advanced.sql:262: NOTICE:  Uri must have the token: file:///tmp/test_datalink/dc1a463c-fd20-41ff-8cfe-fe8c6cafa681;file3.txt
+psql:sql/dl_advanced.sql:262: NOTICE:  Directory content for /tmp/test_datalink/ (must show XXXXXXXX;file3.txt, file3.txt.old from previous test and original file file3.txt):
+psql:sql/dl_advanced.sql:262: NOTICE:  file5.txt
+psql:sql/dl_advanced.sql:262: NOTICE:  file3.txt.old
+psql:sql/dl_advanced.sql:262: NOTICE:  dc1a463c-fd20-41ff-8cfe-fe8c6cafa681;file3.txt
+psql:sql/dl_advanced.sql:262: NOTICE:  file4.txt
+psql:sql/dl_advanced.sql:262: NOTICE:  pg_dltoken
+psql:sql/dl_advanced.sql:262: NOTICE:  img1.png
+psql:sql/dl_advanced.sql:262: NOTICE:  file2.txt
+psql:sql/dl_advanced.sql:262: NOTICE:  file3.txt
+psql:sql/dl_advanced.sql:262: NOTICE:  New token for record ex_id = 3: dc1a463c-fd20-41ff-8cfe-fe8c6cafa681; must be the same as the URL and cpied file
+psql:sql/dl_advanced.sql:262: NOTICE:  Directory content for /tmp/test_datalink/ must me the same as above as we just set the token in the SQL record:
+psql:sql/dl_advanced.sql:262: NOTICE:  file5.txt
+psql:sql/dl_advanced.sql:262: NOTICE:  file3.txt.old
+psql:sql/dl_advanced.sql:262: NOTICE:  dc1a463c-fd20-41ff-8cfe-fe8c6cafa681;file3.txt
+psql:sql/dl_advanced.sql:262: NOTICE:  file4.txt
+psql:sql/dl_advanced.sql:262: NOTICE:  pg_dltoken
+psql:sql/dl_advanced.sql:262: NOTICE:  img1.png
+psql:sql/dl_advanced.sql:262: NOTICE:  file2.txt
+psql:sql/dl_advanced.sql:262: NOTICE:  file3.txt
+psql:sql/dl_advanced.sql:262: NOTICE:  Restore previous version of the file: dl_token is NULL and move the token as dl_prevtoken.
+psql:sql/dl_advanced.sql:262: WARNING:  removing copy file "file:///tmp/test_datalink/dc1a463c-fd20-41ff-8cfe-fe8c6cafa681;file3.txt" after call to dlpreviouscopy()
+psql:sql/dl_advanced.sql:262: WARNING:  could not unlink file "file:///tmp/test_datalink/dc1a463c-fd20-41ff-8cfe-fe8c6cafa681;file3.txt": No such file or directory
+DO
+--------------------------------------------------------------------------------
+The record must have the new token. The dl_token is NULL value because at
+origin the file was create with dlvalue() and no link control, so the previous
+file restored is file3.txt
+-----------------------------------------
+ ex_id |               efile               
+-------+-----------------------------------
+     3 | (1,file3.txt,"Replace content",,)
+(1 row)
+
+--------------------------------------------------------------------------------
+Get a new token for reading to be sure that we are linking file3.txt
+--------------------------------------------------------------------------------
+                              dlurlcomplete                               
+--------------------------------------------------------------------------
+ file:///tmp/test_datalink/7d70b7bd-fe48-41a7-8a4b-b741094b52aa;file3.txt
+(1 row)
+
+--------------------------------------------------------------------------------
+There must be token created xx-xxxX-xx;file3.txt and file3.txt be regular files
+-----------------------------------------
+ 7d70b7bd-fe48-41a7-8a4b-b741094b52aa;file3.txt -> /tmp/test_datalink/file3.txt
+ dc1a463c-fd20-41ff-8cfe-fe8c6cafa681;file3.txt
+ file2.txt
+ file3.txt
+ file4.txt
+ file5.txt
+ img1.png
+ pg_dltoken
+Content of /tmp/test_datalink/pg_dltoken/ directory:
+----------------------------------------------------
+ 7d70b7bd-fe48-41a7-8a4b-b741094b52aa
+ dc1a463c-fd20-41ff-8cfe-fe8c6cafa681
+--------------------------------------------------------------------------------
+Set attribute RECOVERY YES to enable archiving all Datalink created/modified
+will be registered into table pg_datalink_archives.
+UPDATE 1
+--------------------------------------------------------------------------------
+Test insert with dlvalues() and an existing new file with a token. The token of
+the file must be inserted into the dl_token part of the Datalink and the file
+name kept unchanged.
+--------------------------------------------------------------------------------
+INSERT 0 1
+ ex_id |                                           efile                                           
+-------+-------------------------------------------------------------------------------------------
+     4 | (1,file6.txt,"Link file already including a token",32391569-3aed-419f-9921-7399ecc9d980,)
+(1 row)
+
+--------------------------------------------------------------------------------
+Test read and write to file using datalink functions and token
+--------------------------------------------------------------------------------
+psql:sql/dl_advanced.sql:318: NOTICE:  Uri with token to read: file:///tmp/test_datalink/361846a1-6a8f-446d-b2c4-a80709f54332;file3.txt
+psql:sql/dl_advanced.sql:318: NOTICE:  File content: This is another test file originaly named file3.txt
+
+psql:sql/dl_advanced.sql:318: NOTICE:  Uri with token to write: file:///tmp/test_datalink/b72cc584-92d8-4616-acb6-836cddf37ee2;file6.txt
+psql:sql/dl_advanced.sql:318: NOTICE:  Content written: t
+DO
+--------------------------------------------------------------------------------
+Record with ex_id = 4 must have the token of the new written file,
+and the previous token filled by the token of its creation time
+-----------------------------------------
+ ex_id |                                                             efile                                                             
+-------+-------------------------------------------------------------------------------------------------------------------------------
+     4 | (1,file6.txt,"Link file already including a token",b72cc584-92d8-4616-acb6-836cddf37ee2,32391569-3aed-419f-9921-7399ecc9d980)
+(1 row)
+
+--------------------------------------------------------------------------------
+There must be token created xx-xxxX-xx;file3.txt and file3.txt be regular files
+-----------------------------------------
+ 32391569-3aed-419f-9921-7399ecc9d980;file6.txt
+ 361846a1-6a8f-446d-b2c4-a80709f54332;file3.txt -> /tmp/test_datalink/file3.txt
+ 7d70b7bd-fe48-41a7-8a4b-b741094b52aa;file3.txt -> /tmp/test_datalink/file3.txt
+ b72cc584-92d8-4616-acb6-836cddf37ee2;file6.txt
+ dc1a463c-fd20-41ff-8cfe-fe8c6cafa681;file3.txt
+ file2.txt
+ file3.txt
+ file4.txt
+ file5.txt
+ img1.png
+ pg_dltoken
+Content of /tmp/test_datalink/pg_dltoken/ directory:
+----------------------------------------------------
+ 361846a1-6a8f-446d-b2c4-a80709f54332
+ 7d70b7bd-fe48-41a7-8a4b-b741094b52aa
+ b72cc584-92d8-4616-acb6-836cddf37ee2
+ dc1a463c-fd20-41ff-8cfe-fe8c6cafa681
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Try to read Uri without token, must raise an error can not found a token in url
+--------------------------------------------------------------------------------
+psql:sql/dl_advanced.sql:348: ERROR:  can not found a token in url "file:///tmp/test_datalink/file6.txt"
+CONTEXT:  PL/pgSQL function verify_token_from_uri(uri,boolean) line 11 at RAISE
+SQL statement "SELECT verify_token_from_uri(v_uri, false)"
+PL/pgSQL function dlreadfile(datalink,uri) line 27 at SQL statement
+SQL statement "SELECT dlreadfile(A.efile, v_uri)                FROM dl_example A WHERE A.ex_id = 4"
+PL/pgSQL function inline_code_block line 10 at SQL statement
+--------------------------------------------------------------------------------
+Test to read a file with a fake token, must raise an error can not stat file
+--------------------------------------------------------------------------------
+psql:sql/dl_advanced.sql:364: ERROR:  can not stat file "/tmp/test_datalink/pg_dltoken/212699ba-a0a9-4bd9-8e0a-99e9ba957df8": No such file or directory
+CONTEXT:  SQL statement "SELECT datalink_verify_token($1::text, $2, $3)"
+PL/pgSQL function is_valid_token(uuid,boolean,text) line 8 at SQL statement
+SQL statement "SELECT is_valid_token(v_token::uuid, $2, v_path)"
+PL/pgSQL function verify_token_from_uri(uri,boolean) line 23 at SQL statement
+SQL statement "SELECT verify_token_from_uri(v_uri, false)"
+PL/pgSQL function dlreadfile(datalink,uri) line 27 at SQL statement
+SQL statement "SELECT dlreadfile(A.efile, '/etc/212699ba-a0a9-4bd9-8e0a-99e9ba957df8;passwd'::uri)                FROM dl_example A WHERE A.ex_id = 4"
+PL/pgSQL function inline_code_block line 10 at SQL statement
+--------------------------------------------------------------------------------
+Test dlreplacecontent with a token, should warn that the file does not exist
+(invalid token), a copy is normally done using dlurlcompletewrite() but not with
+dlurlcomplete() like here
+--------------------------------------------------------------------------------
+psql:sql/dl_advanced.sql:382: WARNING:  attempt to access file "/tmp/test_datalink/pg_dltoken/91f1dd3c-b9d6-42ac-b71e-2d7c1c6ffac1" for writing without a valid token "/tmp/test_datalink/91f1dd3c-b9d6-42ac-b71e-2d7c1c6ffac1;file3.txt", mode was R
+psql:sql/dl_advanced.sql:382: ERROR:  invalid token "91f1dd3c-b9d6-42ac-b71e-2d7c1c6ffac1" to access file "/tmp/test_datalink/file3.txt"
+CONTEXT:  PL/pgSQL function is_valid_token(uuid,boolean,text) line 10 at RAISE
+SQL statement "SELECT is_valid_token(v_token::uuid, $2, v_path)"
+PL/pgSQL function verify_token_from_uri(uri,boolean) line 23 at SQL statement
+SQL statement "SELECT verify_token_from_uri(v_src, true)"
+PL/pgSQL function dlreplacecontent(datalink,uri,uri,text) line 74 at SQL statement
+SQL statement "UPDATE dl_example SET efile=dlreplacecontent(efile, 'file3.txt'::uri, v_uri, 'Replace content'::text) WHERE ex_id=3"
+PL/pgSQL function inline_code_block line 9 at SQL statement
+--------------------------------------------------------------------------------
+Show content of external file directory
+-----------------------------------------
+ 32391569-3aed-419f-9921-7399ecc9d980;file6.txt
+ 361846a1-6a8f-446d-b2c4-a80709f54332;file3.txt -> /tmp/test_datalink/file3.txt
+ 3e1a40e1-2dd6-4c94-8716-6f348cb152de;file6.txt -> /tmp/test_datalink/b72cc584-92d8-4616-acb6-836cddf37ee2;file6.txt
+ 7d70b7bd-fe48-41a7-8a4b-b741094b52aa;file3.txt -> /tmp/test_datalink/file3.txt
+ 91f1dd3c-b9d6-42ac-b71e-2d7c1c6ffac1;file3.txt -> /tmp/test_datalink/file3.txt
+ b72cc584-92d8-4616-acb6-836cddf37ee2;file6.txt
+ dc1a463c-fd20-41ff-8cfe-fe8c6cafa681;file3.txt
+ file2.txt
+ file3.txt
+ file4.txt
+ file5.txt
+ img1.png
+ pg_dltoken
+Content of /tmp/test_datalink/pg_dltoken/ directory:
+----------------------------------------------------
+ 361846a1-6a8f-446d-b2c4-a80709f54332
+ 3e1a40e1-2dd6-4c94-8716-6f348cb152de
+ 7d70b7bd-fe48-41a7-8a4b-b741094b52aa
+ 91f1dd3c-b9d6-42ac-b71e-2d7c1c6ffac1
+ b72cc584-92d8-4616-acb6-836cddf37ee2
+ dc1a463c-fd20-41ff-8cfe-fe8c6cafa681
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Replace content of file3.txt using the right functions and tokens
+--------------------------------------------------------------------------------
+ ex_id |                                                             efile                                                             
+-------+-------------------------------------------------------------------------------------------------------------------------------
+     4 | (1,file6.txt,"Link file already including a token",b72cc584-92d8-4616-acb6-836cddf37ee2,32391569-3aed-419f-9921-7399ecc9d980)
+(1 row)
+
+BEGIN
+psql:sql/dl_advanced.sql:412: NOTICE:  Uri with token to write: file:///tmp/test_datalink/b00f59e3-60a5-4bfa-a45b-214ccb08e425;file6.txt
+psql:sql/dl_advanced.sql:412: NOTICE:  Write to "file:///tmp/test_datalink/b00f59e3-60a5-4bfa-a45b-214ccb08e425;file6.txts" done.
+psql:sql/dl_advanced.sql:412: NOTICE:  Content of file "file:///tmp/test_datalink/b00f59e3-60a5-4bfa-a45b-214ccb08e425;file6.txt" should be: "Hello world"
+DO
+COMMIT
+--------------------------------------------------------------------------------
+Show content of external file directory
+-----------------------------------------
+ 32391569-3aed-419f-9921-7399ecc9d980;file6.txt
+ 361846a1-6a8f-446d-b2c4-a80709f54332;file3.txt -> /tmp/test_datalink/file3.txt
+ 3e1a40e1-2dd6-4c94-8716-6f348cb152de;file6.txt -> /tmp/test_datalink/b72cc584-92d8-4616-acb6-836cddf37ee2;file6.txt
+ 7d70b7bd-fe48-41a7-8a4b-b741094b52aa;file3.txt -> /tmp/test_datalink/file3.txt
+ 91f1dd3c-b9d6-42ac-b71e-2d7c1c6ffac1;file3.txt -> /tmp/test_datalink/file3.txt
+ b00f59e3-60a5-4bfa-a45b-214ccb08e425;file6.txt
+ b72cc584-92d8-4616-acb6-836cddf37ee2;file6.txt
+ dc1a463c-fd20-41ff-8cfe-fe8c6cafa681;file3.txt
+ file2.txt
+ file3.txt
+ file4.txt
+ file5.txt
+ img1.png
+ pg_dltoken
+Content of /tmp/test_datalink/pg_dltoken/ directory:
+----------------------------------------------------
+ 361846a1-6a8f-446d-b2c4-a80709f54332
+ 3e1a40e1-2dd6-4c94-8716-6f348cb152de
+ 7d70b7bd-fe48-41a7-8a4b-b741094b52aa
+ 91f1dd3c-b9d6-42ac-b71e-2d7c1c6ffac1
+ b00f59e3-60a5-4bfa-a45b-214ccb08e425
+ b72cc584-92d8-4616-acb6-836cddf37ee2
+ dc1a463c-fd20-41ff-8cfe-fe8c6cafa681
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+the current and old token must reflect the two regular file on disk
+--------------------------------------------------------------------------------
+ ex_id |                                                   efile                                                   
+-------+-----------------------------------------------------------------------------------------------------------
+     4 | (1,file6.txt,"Replace content",b00f59e3-60a5-4bfa-a45b-214ccb08e425,b72cc584-92d8-4616-acb6-836cddf37ee2)
+(1 row)
+
+--------------------------------------------------------------------------------
+Look at file to archives, should return one record for file6.txt
+--------------------------------------------------------------------------------
+ base |                 url                 
+------+-------------------------------------
+    1 | file:///tmp/test_datalink/file6.txt
+(1 row)
+

@@ -1,0 +1,1 @@
+Content of file 6 used to test first link of a file with a token

@@ -1,0 +1,6 @@
+comment = 'functions and types to implement datalink in PostgreSQL server'
+default_version = '0.5.0'
+module_pathname = '$libdir/datalink'
+relocatable = false
+superuser = true
+requires = 'uuid-ossp,uri'

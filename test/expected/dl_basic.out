@@ -1,0 +1,511 @@
+Pager usage is off.
+psql:sql/dl_basic.sql:6: NOTICE:  database "test_datalink" does not exist, skipping
+DROP DATABASE
+CREATE DATABASE
+You are now connected to database "test_datalink" as user "gilles".
+CREATE EXTENSION
+CREATE EXTENSION
+CREATE EXTENSION
+CREATE TABLE
+Null display is "<NULL>".
+--------------------------------------------------------------------------------
+Create a test Datalink base (public.dl_example.efile) with DB full control
+--------------------------------------------------------------------------------
+INSERT 0 1
+--------------------------------------------------------------------------------
+Test DLVALUE function
+--------------------------------------------------------------------------------
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+UPDATE 1
+DELETE 1
+INSERT 0 1
+INSERT 0 1
+--------------------------------------------------------------------------------
+Look for Datalink example, only last entry (ex_id=1) must have a token,
+other entries use default base directory with no link control
+--------------------------------------------------------------------------------
+ ex_id |                                           efile                                           
+-------+-------------------------------------------------------------------------------------------
+    98 | (0,http://pgbadger.darold.net/,,,)
+    99 | (-1,"","Just a comment",,)
+   100 | (0,http://pgcluu.darold.net/index.html,"Main page of pgCluu site",,)
+     1 | (1,img1.png,"Image in the test datalink directory",6c466a88-4272-493c-9a92-d62d00fe742f,)
+(4 rows)
+
+--------------------------------------------------------------------------------
+Test DLCOMMENT function
+--------------------------------------------------------------------------------
+        dlcomment         
+--------------------------
+ Main page of pgCluu site
+(1 row)
+
+ dlcomment 
+-----------
+ <NULL>
+(1 row)
+
+--------------------------------------------------------------------------------
+Test DLLINKTYPE function
+--------------------------------------------------------------------------------
+ dllinktype 
+------------
+ URL
+(1 row)
+
+psql:sql/dl_basic.sql:67: ERROR:  DataLink URL "file:///var/lib/pgsql/11/data/testfile.txt" does not match directory base "file:///var/lib/pg_datalink/"
+CONTEXT:  PL/pgSQL function dlvalue(uri,text,text) line 98 at RAISE
+ dllinktype 
+------------
+(0 rows)
+
+INSERT 0 1
+ dllinktype 
+------------
+ URL
+(1 row)
+
+--------------------------------------------------------------------------------
+Must return the base directory insted of default link type FILE or URL
+--------------------------------------------------------------------------------
+       dllinktype        
+-------------------------
+ public.dl_example.efile
+(1 row)
+
+--------------------------------------------------------------------------------
+Change behavior of default directories just for some test:
+linkcontrol=t,integrity=t,readperm=t,writeperm=t,onunlink=DELETE
+--------------------------------------------------------------------------------
+UPDATE 2
+INSERT 0 1
+INSERT 0 1
+   dllinktype   
+----------------
+ test_directory
+(1 row)
+
+ dllinktype 
+------------
+ <NULL>
+(1 row)
+
+--------------------------------------------------------------------------------
+Test DLURLSCHEME function
+--------------------------------------------------------------------------------
+ dlurlscheme 
+-------------
+ http
+(1 row)
+
+ dlurlscheme 
+-------------
+(0 rows)
+
+INSERT 0 1
+psql:sql/dl_basic.sql:91: ERROR:  Invalid uri "ldap://www.darold.net/" for datalink, only file:// or http:// schemes are supported
+CONTEXT:  PL/pgSQL function dlvalue(uri,text,text) line 45 at RAISE
+ dlurlscheme 
+-------------
+(0 rows)
+
+ dlurlscheme 
+-------------
+ <NULL>
+(1 row)
+
+--------------------------------------------------------------------------------
+When DATALINK value only includes comment the result is a zero length string.
+--------------------------------------------------------------------------------
+ dlurlscheme 
+-------------
+ 
+(1 row)
+
+--------------------------------------------------------------------------------
+Test DLURLSERVER function
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Must raise a warning about function that to be use with URL only
+--------------------------------------------------------------------------------
+ dlurlserver 
+-------------
+(0 rows)
+
+ dlurlserver 
+-------------
+(0 rows)
+
+ dlurlserver 
+-------------
+ <NULL>
+(1 row)
+
+--------------------------------------------------------------------------------
+When DATALINK value only includes comment the result is a zero length string.
+--------------------------------------------------------------------------------
+ dlurlserver 
+-------------
+ 
+(1 row)
+
+--------------------------------------------------------------------------------
+Test DLURLCOMPLETE function
+--------------------------------------------------------------------------------
+          dlurlcomplete           
+----------------------------------
+ http://www.darold.net/index.html
+(1 row)
+
+ dlurlcomplete 
+---------------
+ 
+(1 row)
+
+ dlurlcomplete 
+---------------
+ <NULL>
+(1 row)
+
+--------------------------------------------------------------------------------
+Must raise an error can not link remote URI
+--------------------------------------------------------------------------------
+psql:sql/dl_basic.sql:122: ERROR:  can not link remote URI "http:///index.html"
+CONTEXT:  PL/pgSQL function dlurlcomplete(datalink) line 32 at RAISE
+--------------------------------------------------------------------------------
+At this stage img1.png have been renamed with a token by call to dlvalue() at
+insert and no token must have been generated in /tmp/test_datalink/pg_dltoken/
+Content of /tmp/test_datalink/ directory:
+-----------------------------------------
+ 6c466a88-4272-493c-9a92-d62d00fe742f;img1.png
+ file2.txt
+ file3.txt
+ file4.txt
+ file5.txt
+ pg_dltoken
+Content of /tmp/test_datalink/pg_dltoken/ directory:
+----------------------------------------------------
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Must create a token for reading
+--------------------------------------------------------------------------------
+                              dlurlcomplete                              
+-------------------------------------------------------------------------
+ file:///tmp/test_datalink/ec57428f-e37d-4fc8-9943-a165211cd810;img1.png
+(1 row)
+
+--------------------------------------------------------------------------------
+A link with token pointing to img1.png (with token) file must exist and the
+dl_token directory must contain the token for reading used in the symlink name
+Content of /tmp/test_datalink/ directory:
+-----------------------------------------
+ 6c466a88-4272-493c-9a92-d62d00fe742f;img1.png
+ ec57428f-e37d-4fc8-9943-a165211cd810;img1.png -> /tmp/test_datalink/6c466a88-4272-493c-9a92-d62d00fe742f;img1.png
+ file2.txt
+ file3.txt
+ file4.txt
+ file5.txt
+ pg_dltoken
+Content of /tmp/test_datalink/pg_dltoken/ directory: (W=0000000 3057 R=0000000 3052)
+----------------------------------------------------
+ ec57428f-e37d-4fc8-9943-a165211cd810
+0
+
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Test DLURLCOMPLETEONLY function
+--------------------------------------------------------------------------------
+        dlurlcompleteonly         
+----------------------------------
+ http://www.darold.net/index.html
+(1 row)
+
+        dlurlcompleteonly         
+----------------------------------
+ http://www.darold.net/index.html
+(1 row)
+
+ dlurlcompleteonly 
+-------------------
+ 
+(1 row)
+
+         dlurlcompleteonly          
+------------------------------------
+ file:///tmp/test_datalink/img1.png
+(1 row)
+
+ dlurlcompleteonly 
+-------------------
+ <NULL>
+(1 row)
+
+--------------------------------------------------------------------------------
+Test DLURLPATH function
+--------------------------------------------------------------------------------
+  dlurlpath  
+-------------
+ /index.html
+(1 row)
+
+ dlurlpath 
+-----------
+ 
+(1 row)
+
+ dlurlpath 
+-----------
+ <NULL>
+(1 row)
+
+--------------------------------------------------------------------------------
+Must raise a notice can not link remote URI
+--------------------------------------------------------------------------------
+psql:sql/dl_basic.sql:170: ERROR:  can not link remote URI "http:///index.html"
+CONTEXT:  PL/pgSQL function dlurlpath(datalink) line 33 at RAISE
+--------------------------------------------------------------------------------
+Must create a token for reading
+--------------------------------------------------------------------------------
+                            dlurlpath                             
+------------------------------------------------------------------
+ /tmp/test_datalink/ce7ddb8f-bef4-449f-886a-ab30000c22da;img1.png
+(1 row)
+
+--------------------------------------------------------------------------------
+An other link with token pointing to img1.png (with token) file must exist and the
+dl_token directory must contain the new token for reading used in the symlink name
+Content of /tmp/test_datalink/ directory:
+-----------------------------------------
+ 6c466a88-4272-493c-9a92-d62d00fe742f;img1.png
+ ce7ddb8f-bef4-449f-886a-ab30000c22da;img1.png -> /tmp/test_datalink/6c466a88-4272-493c-9a92-d62d00fe742f;img1.png
+ ec57428f-e37d-4fc8-9943-a165211cd810;img1.png -> /tmp/test_datalink/6c466a88-4272-493c-9a92-d62d00fe742f;img1.png
+ file2.txt
+ file3.txt
+ file4.txt
+ file5.txt
+ pg_dltoken
+Content of /tmp/test_datalink/pg_dltoken/ directory: (W=0000000 3057 R=0000000 3052)
+----------------------------------------------------
+ ce7ddb8f-bef4-449f-886a-ab30000c22da
+ ec57428f-e37d-4fc8-9943-a165211cd810
+0
+
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Test DLURLPATHONLY function
+--------------------------------------------------------------------------------
+ dlurlpathonly 
+---------------
+ /index.html
+(1 row)
+
+ dlurlpathonly 
+---------------
+ /index.html
+(1 row)
+
+ dlurlpathonly 
+---------------
+ 
+(1 row)
+
+        dlurlpathonly        
+-----------------------------
+ /tmp/test_datalink/img1.png
+(1 row)
+
+ dlurlpathonly 
+---------------
+ <NULL>
+(1 row)
+
+--------------------------------------------------------------------------------
+Test DLURLCOMPLETEWRITE function
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Must raise an error that it can not write to a remote URL
+--------------------------------------------------------------------------------
+psql:sql/dl_basic.sql:203: ERROR:  can not write to a remote URL "http://www.darold.net/index.html"
+CONTEXT:  PL/pgSQL function dlurlcompletewrite(datalink) line 37 at RAISE
+--------------------------------------------------------------------------------
+Must raise an error about no link control
+--------------------------------------------------------------------------------
+psql:sql/dl_basic.sql:207: ERROR:  Can not write with NO LINK CONTROL.
+CONTEXT:  PL/pgSQL function dlurlcompletewrite(datalink) line 20 at RAISE
+ dlurlcompletewrite 
+--------------------
+ 
+(1 row)
+
+ dlurlcompletewrite 
+--------------------
+ <NULL>
+(1 row)
+
+--------------------------------------------------------------------------------
+Test DLURLPATHWRITE function
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Must raise an error that it can not write to a remote URL
+--------------------------------------------------------------------------------
+psql:sql/dl_basic.sql:216: ERROR:  can not link remote URI "http://www.darold.net/index.html"
+CONTEXT:  PL/pgSQL function dlurlpathwrite(datalink) line 36 at RAISE
+--------------------------------------------------------------------------------
+Must raise an error about no link control
+--------------------------------------------------------------------------------
+psql:sql/dl_basic.sql:220: ERROR:  Can not write with NO LINK CONTROL.
+CONTEXT:  PL/pgSQL function dlurlpathwrite(datalink) line 20 at RAISE
+ dlurlpathwrite 
+----------------
+ 
+(1 row)
+
+ dlurlpathwrite 
+----------------
+ <NULL>
+(1 row)
+
+--------------------------------------------------------------------------------
+Content of /tmp/test_datalink/ and /tmp/test_datalink/pg_dltoken/ must be unchanged
+Content of /tmp/test_datalink/ directory:
+-----------------------------------------
+ 6c466a88-4272-493c-9a92-d62d00fe742f;img1.png
+ ce7ddb8f-bef4-449f-886a-ab30000c22da;img1.png -> /tmp/test_datalink/6c466a88-4272-493c-9a92-d62d00fe742f;img1.png
+ ec57428f-e37d-4fc8-9943-a165211cd810;img1.png -> /tmp/test_datalink/6c466a88-4272-493c-9a92-d62d00fe742f;img1.png
+ file2.txt
+ file3.txt
+ file4.txt
+ file5.txt
+ pg_dltoken
+Content of /tmp/test_datalink/pg_dltoken/ directory:
+----------------------------------------------------
+ ce7ddb8f-bef4-449f-886a-ab30000c22da
+ ec57428f-e37d-4fc8-9943-a165211cd810
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Test DLURLCOMPLETEWRITE and DLURLPATHWRITE functions with token
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Must create a token for writing
+--------------------------------------------------------------------------------
+                           dlurlcompletewrite                            
+-------------------------------------------------------------------------
+ file:///tmp/test_datalink/206dab2c-52f4-4545-84d2-c78f6410d062;img1.png
+(1 row)
+
+--------------------------------------------------------------------------------
+A copy of file img1.png with a token for writing must exist
+dl_token directory must contain the token for writing used in the file name
+Content of /tmp/test_datalink/ directory:
+-----------------------------------------
+ 206dab2c-52f4-4545-84d2-c78f6410d062;img1.png
+ 6c466a88-4272-493c-9a92-d62d00fe742f;img1.png
+ ce7ddb8f-bef4-449f-886a-ab30000c22da;img1.png -> /tmp/test_datalink/6c466a88-4272-493c-9a92-d62d00fe742f;img1.png
+ ec57428f-e37d-4fc8-9943-a165211cd810;img1.png -> /tmp/test_datalink/6c466a88-4272-493c-9a92-d62d00fe742f;img1.png
+ file2.txt
+ file3.txt
+ file4.txt
+ file5.txt
+ pg_dltoken
+Content of /tmp/test_datalink/pg_dltoken/ directory: (W=0000000 3057 R=0000000 3052)
+----------------------------------------------------
+ 206dab2c-52f4-4545-84d2-c78f6410d062
+ ce7ddb8f-bef4-449f-886a-ab30000c22da
+ ec57428f-e37d-4fc8-9943-a165211cd810
+0
+
+--------------------------------------------------------------------------------
+                             dlurlpathwrite                              
+-------------------------------------------------------------------------
+ file:///tmp/test_datalink/0e6f8250-e986-4433-9995-ae0819961484;img1.png
+(1 row)
+
+--------------------------------------------------------------------------------
+A new copy of file img1.png with a token for writing must exist
+dl_token directory must contain the token for writing used in the file name
+Content of /tmp/test_datalink/ directory:
+-----------------------------------------
+ 0e6f8250-e986-4433-9995-ae0819961484;img1.png
+ 206dab2c-52f4-4545-84d2-c78f6410d062;img1.png
+ 6c466a88-4272-493c-9a92-d62d00fe742f;img1.png
+ ce7ddb8f-bef4-449f-886a-ab30000c22da;img1.png -> /tmp/test_datalink/6c466a88-4272-493c-9a92-d62d00fe742f;img1.png
+ ec57428f-e37d-4fc8-9943-a165211cd810;img1.png -> /tmp/test_datalink/6c466a88-4272-493c-9a92-d62d00fe742f;img1.png
+ file2.txt
+ file3.txt
+ file4.txt
+ file5.txt
+ pg_dltoken
+Content of /tmp/test_datalink/pg_dltoken/ directory: (W=0000000 3057 R=0000000 3052)
+----------------------------------------------------
+ 0e6f8250-e986-4433-9995-ae0819961484
+ 206dab2c-52f4-4545-84d2-c78f6410d062
+ ce7ddb8f-bef4-449f-886a-ab30000c22da
+ ec57428f-e37d-4fc8-9943-a165211cd810
+0
+
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Final content of the DL_EXAMPLE table
+--------------------------------------------------------------------------------
+ ex_id |                                           efile                                           
+-------+-------------------------------------------------------------------------------------------
+    98 | (0,http://pgbadger.darold.net/,,,)
+    99 | (-1,"","Just a comment",,)
+   100 | (0,http://pgcluu.darold.net/index.html,"Main page of pgCluu site",,)
+     1 | (1,img1.png,"Image in the test datalink directory",6c466a88-4272-493c-9a92-d62d00fe742f,)
+   102 | (0,http://www.darold.net/index.html,"Test default link type URL.",,)
+   103 | (100,index.html,"Test directory link type.",,)
+(6 rows)
+
+--------------------------------------------------------------------------------
+Rollback a transaction that open a datalink for writing
+--------------------------------------------------------------------------------
+BEGIN
+                             dlurlpathwrite                              
+-------------------------------------------------------------------------
+ file:///tmp/test_datalink/dd9aec49-0c76-44b5-bd93-6ced58bb59b0;img1.png
+(1 row)
+
+ROLLBACK
+--------------------------------------------------------------------------------
+A new copy of file img1.png with a token for writing must exist
+dl_token directory must contain the token for writing used in the file name
+Both files (token and copy) must be removed by the bgworker cleaner.
+Content of /tmp/test_datalink/ directory:
+-----------------------------------------
+ 0e6f8250-e986-4433-9995-ae0819961484;img1.png
+ 206dab2c-52f4-4545-84d2-c78f6410d062;img1.png
+ 6c466a88-4272-493c-9a92-d62d00fe742f;img1.png
+ ce7ddb8f-bef4-449f-886a-ab30000c22da;img1.png -> /tmp/test_datalink/6c466a88-4272-493c-9a92-d62d00fe742f;img1.png
+ dd9aec49-0c76-44b5-bd93-6ced58bb59b0;img1.png
+ ec57428f-e37d-4fc8-9943-a165211cd810;img1.png -> /tmp/test_datalink/6c466a88-4272-493c-9a92-d62d00fe742f;img1.png
+ file2.txt
+ file3.txt
+ file4.txt
+ file5.txt
+ pg_dltoken
+Content of /tmp/test_datalink/pg_dltoken/ directory: (W=0000000 3057 R=0000000 3052)
+----------------------------------------------------
+ 0e6f8250-e986-4433-9995-ae0819961484
+ 206dab2c-52f4-4545-84d2-c78f6410d062
+ ce7ddb8f-bef4-449f-886a-ab30000c22da
+ dd9aec49-0c76-44b5-bd93-6ced58bb59b0
+ ec57428f-e37d-4fc8-9943-a165211cd810
+0
+
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+Content of the DL_EXAMPLE table must have not changed
+--------------------------------------------------------------------------------
+ ex_id |                                           efile                                           
+-------+-------------------------------------------------------------------------------------------
+    98 | (0,http://pgbadger.darold.net/,,,)
+    99 | (-1,"","Just a comment",,)
+   100 | (0,http://pgcluu.darold.net/index.html,"Main page of pgCluu site",,)
+     1 | (1,img1.png,"Image in the test datalink directory",6c466a88-4272-493c-9a92-d62d00fe742f,)
+   102 | (0,http://www.darold.net/index.html,"Test default link type URL.",,)
+   103 | (100,index.html,"Test directory link type.",,)
+(6 rows)
+
