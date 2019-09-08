@@ -1,5 +1,13 @@
 # PostgreSQL SQL/MED DATALINK extension
 
+DATALINK is an SQL data type that allows to store a reference to a file that
+is external to the database system. The purpose of Datalink is to provide a
+mechanism to implement the referential integrity, recovery and access control
+of the external files and the SQL-data associated with them. Files can be
+modified using file system commands or via SQL.
+
+This extension aims to add this feature to PostgreSQL.
+
 ## Disclaimer
 
 This extension is a proof of concept for implementing DATALINK in PostgreSQL,
@@ -13,7 +21,7 @@ at the presentation at [PgConf Asia 2019 conference](http://www.pgconf.asia)
 
 The Datalink extension requires the `uuid-ossp` and the [uri](https://github.com/darold/uri) extensions.
  
-In order to install the Datalink extension download latest developement sources
+In order to install the Datalink extension download latest development sources
 from [GitHub](https://github.com/darold/datalink) and use the following command
 to build and install the extension. `pg_config` must be in found from your PATH
 environment variable.
@@ -46,14 +54,64 @@ extension move to beta stage.
 
 ## Description
 
-DATALINK is an SQL data type that allows to store a reference to a file that
-is external to the database system.
-
 SQL/MED allows a variety of attributes to be specified for DATALINK columns.
 They are used to defined how the database system controls the file. This can
 be from no control at all (the file does not even have to exist) to full
 control, where removal of the datalink value from the database leads to a
 deletion of the physical file.
+
+Example of use:
+
+```
+    CREATE TABLE persons
+    (
+        id integer,
+        fullname text,
+        picture DATALINK
+    );
+
+    INSERT INTO persons VALUES (1, 'Jon Doe',
+            DLVALUE('img1.jpg', 'MyBaseDir', 'A comment'));
+```
+
+A DATALINK is formerly composed by:
+
+* a base directory representing mount points where external files can be
+  read or written
+* an URI corresponding to the path of the file relative to its base directory
+* a comment
+
+The base directories must exists on file system and be registered into table
+`pg_datalink_bases`, only PostgreSQL superuser can do that.
+
+```
+    INSERT INTO pg_datalink_bases (dirname, base)
+		VALUES (‘MyBaseDir’, ‘file:///var/www/mysite1/’);
+```
+
+No verification if the path exists is done.
+
+The `postgres` user must have read/write permission on the directory if files
+will be managed by SQL.
+
+See `test/` directory for more example of use.
+
+A background worker is started with PostgreSQL and the process is named
+"Datalink background worker". This background worker scan periodically a
+directory where access control token are stored. Default is each 10 seconds
+(controlled by GUC _datalink.dl_naptime_) for testing.
+
+This background worker is responsible of removing token that have expired
+from directory `$PGDATA/pg_token/` (GUC _datalink.dl_base_directory_). The
+default expiry time is 60 seconds, the value can be changed using GUC
+_datalink.dl_token_expiry_. For read token it also remove all link to
+external files when the token expires. For write access token the backround
+worker remove all obsolete copies that correspond to a rollbacked transaction.
+
+See file SQL-MED-DATALINK-PgConfAsia2019.pdf for detailed information about
+the DATALINK implementation.
+
+### Permission modes
 
 DATALINKs supports two permission modes to read and write datalinks, namely
 
