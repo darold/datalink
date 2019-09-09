@@ -14,7 +14,7 @@ This extension is a proof of concept for implementing DATALINK in PostgreSQL,
 it must not be used in production until an official release will be published.
 Expect changes in the implementation and behaviors before the official release.
 
-The documentation is at its early stage, for detailled information look
+The documentation is at its early stage, for more detailled information look
 at the presentation at [PgConf Asia 2019 conference](http://www.pgconf.asia)
 
 ## Installation
@@ -74,7 +74,7 @@ Example of use:
             DLVALUE('img1.jpg', 'MyBaseDir', 'A comment'));
 ```
 
-A DATALINK is formerly composed by:
+A DATALINK is formally composed by:
 
 * a base directory representing mount points where external files can be
   read or written
